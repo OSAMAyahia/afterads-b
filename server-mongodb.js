@@ -111,31 +111,7 @@ const port = process.env.PORT || 3001;
 
 // CORS configuration for AfterAds deployment
 const corsOptions = {
-  origin: [
-    // Development URLs
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'http://localhost:5175',
-    'http://localhost:5176', 
-    'http://localhost:3000',
-    'http://localhost:8081',     // Expo web development server
-    'http://localhost:8082',     // Expo web development server
-    'http://localhost:8083',     // Expo web development server
-    'http://localhost:8084',     // Expo web development server
-    'http://localhost:8085',     // Expo web development server
-    
-    // AfterAds Production URLs - will be updated after deployment
-    'https://afterads.netlify.app',
-    'https://afterads.netlify.app/',
-    'https://afterads-frontend.netlify.app',
-    'https://afterads-frontend.netlify.app/',
-    
-    // Future custom domain (when available)
-    'https://afterads.store',
-    'https://www.afterads.store',
-    'http://afterads.store',
-    'http://www.afterads.store',
-  ],
+  origin: "*",
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
