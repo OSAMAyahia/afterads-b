@@ -207,7 +207,7 @@ router.delete('/main/:mainId', async (req, res) => {
 // CATEGORY ROUTES (داخل Main Classification)
 // =====================================
 
-// POST /api/docs/main/:mainId/categories - Add category to main classification
+// POST /api/documentations/main/:mainId/categories - Add category to main classification
 router.post('/main/:mainId/categories', async (req, res) => {
   try {
     const { mainId } = req.params;
@@ -317,7 +317,7 @@ router.delete('/main/:mainId/categories/:categoryId', async (req, res) => {
 });
 
 // =====================================
-// CLASSIFICATION & DOCUMENTATION ROUTES
+// CLASSIFICATION ROUTES
 // =====================================
 
 // POST /api/documentations/main/:mainId/categories/:categoryId/classifications
@@ -331,6 +331,10 @@ router.post('/main/:mainId/categories/:categoryId/classifications', async (req, 
     }
     
     let mainClass = await Documentation.findOne({ id: mainId });
+    if (!mainClass && mainId.match(/^[0-9a-fA-F]{24}$/)) {
+      mainClass = await Documentation.findOne({ _id: mainId });
+    }
+    
     if (!mainClass) {
       return res.status(404).json({ error: 'Main classification not found' });
     }
@@ -353,6 +357,84 @@ router.post('/main/:mainId/categories/:categoryId/classifications', async (req, 
   }
 });
 
+// PUT /api/documentations/main/:mainId/categories/:categoryId/classifications/:classificationId
+router.put('/main/:mainId/categories/:categoryId/classifications/:classificationId', async (req, res) => {
+  try {
+    const { mainId, categoryId, classificationId } = req.params;
+    const data = req.body;
+    
+    let mainClass = await Documentation.findOne({ id: mainId });
+    if (!mainClass && mainId.match(/^[0-9a-fA-F]{24}$/)) {
+      mainClass = await Documentation.findOne({ _id: mainId });
+    }
+    
+    if (!mainClass) {
+      return res.status(404).json({ error: 'Main classification not found' });
+    }
+    
+    const category = mainClass.categories?.find(c => c.id === categoryId);
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+    
+    const classification = category.classifications?.find(cls => cls.id === classificationId);
+    if (!classification) {
+      return res.status(404).json({ error: 'Classification not found' });
+    }
+    
+    if (data.slug && data.slug !== classification.slug) {
+      const exists = category.classifications.some(cls => cls.slug === data.slug && cls.id !== classificationId);
+      if (exists) {
+        return res.status(400).json({ error: 'A classification with this slug already exists' });
+      }
+    }
+    
+    Object.assign(classification, data);
+    const updated = await mainClass.save();
+    
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error', message: error.message });
+  }
+});
+
+// DELETE /api/documentations/main/:mainId/categories/:categoryId/classifications/:classificationId
+router.delete('/main/:mainId/categories/:categoryId/classifications/:classificationId', async (req, res) => {
+  try {
+    const { mainId, categoryId, classificationId } = req.params;
+    
+    let mainClass = await Documentation.findOne({ id: mainId });
+    if (!mainClass && mainId.match(/^[0-9a-fA-F]{24}$/)) {
+      mainClass = await Documentation.findOne({ _id: mainId });
+    }
+    
+    if (!mainClass) {
+      return res.status(404).json({ error: 'Main classification not found' });
+    }
+    
+    const category = mainClass.categories?.find(c => c.id === categoryId);
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+    
+    const initialLength = category.classifications?.length || 0;
+    category.classifications = (category.classifications || []).filter(cls => cls.id !== classificationId);
+    
+    if (category.classifications.length === initialLength) {
+      return res.status(404).json({ error: 'Classification not found' });
+    }
+    
+    await mainClass.save();
+    res.json({ message: 'Classification deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error', message: error.message });
+  }
+});
+
+// =====================================
+// DOCUMENTATION ROUTES
+// =====================================
+
 // POST /api/documentations/main/:mainId/categories/:categoryId/documentations
 router.post('/main/:mainId/categories/:categoryId/documentations', async (req, res) => {
   try {
@@ -364,6 +446,10 @@ router.post('/main/:mainId/categories/:categoryId/documentations', async (req, r
     }
     
     let mainClass = await Documentation.findOne({ id: mainId });
+    if (!mainClass && mainId.match(/^[0-9a-fA-F]{24}$/)) {
+      mainClass = await Documentation.findOne({ _id: mainId });
+    }
+    
     if (!mainClass) {
       return res.status(404).json({ error: 'Main classification not found' });
     }
@@ -385,26 +471,25 @@ router.post('/main/:mainId/categories/:categoryId/documentations', async (req, r
   }
 });
 
-// PUT /api/documentations/main/:categoryId/categories/:classificationId/documentations/:docId - Update documentation
-router.put('/main/:categoryId/categories/:classificationId/documentations/:docId', async (req, res) => {
+// PUT /api/documentations/main/:mainId/categories/:categoryId/documentations/:docId - Update documentation
+router.put('/main/:mainId/categories/:categoryId/documentations/:docId', async (req, res) => {
   try {
-    const { categoryId, classificationId, docId } = req.params;
+    const { mainId, categoryId, docId } = req.params;
     const data = req.body;
 
-    // categoryId here represents the main classification identifier (ID or slug)
-    let mainClass = await Documentation.findOne({ id: categoryId });
-    if (!mainClass && categoryId.match(/^[0-9a-fA-F]{24}$/)) {
-      mainClass = await Documentation.findOne({ _id: categoryId });
+    let mainClass = await Documentation.findOne({ id: mainId });
+    if (!mainClass && mainId.match(/^[0-9a-fA-F]{24}$/)) {
+      mainClass = await Documentation.findOne({ _id: mainId });
     }
     if (!mainClass && typeof Documentation.findBySlug === 'function') {
-      mainClass = await Documentation.findBySlug(categoryId);
+      mainClass = await Documentation.findBySlug(mainId);
     }
+    
     if (!mainClass) {
       return res.status(404).json({ error: 'Main classification not found' });
     }
 
-    // classificationId here represents the category identifier (ID or slug)
-    const category = (mainClass.categories || []).find(c => c.id === classificationId || c.slug === classificationId);
+    const category = (mainClass.categories || []).find(c => c.id === categoryId || c.slug === categoryId);
     if (!category) {
       return res.status(404).json({ error: 'Category not found' });
     }
@@ -433,6 +518,39 @@ router.put('/main/:categoryId/categories/:classificationId/documentations/:docId
     const updatedDoc = (updatedCategory?.documentations || []).find(d => d.id === doc.id || d.slug === doc.slug);
 
     res.json(updatedDoc || doc);
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error', message: error.message });
+  }
+});
+
+// DELETE /api/documentations/main/:mainId/categories/:categoryId/documentations/:docId
+router.delete('/main/:mainId/categories/:categoryId/documentations/:docId', async (req, res) => {
+  try {
+    const { mainId, categoryId, docId } = req.params;
+    
+    let mainClass = await Documentation.findOne({ id: mainId });
+    if (!mainClass && mainId.match(/^[0-9a-fA-F]{24}$/)) {
+      mainClass = await Documentation.findOne({ _id: mainId });
+    }
+    
+    if (!mainClass) {
+      return res.status(404).json({ error: 'Main classification not found' });
+    }
+    
+    const category = mainClass.categories?.find(c => c.id === categoryId);
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+    
+    const initialLength = category.documentations?.length || 0;
+    category.documentations = (category.documentations || []).filter(doc => doc.id !== docId);
+    
+    if (category.documentations.length === initialLength) {
+      return res.status(404).json({ error: 'Documentation not found' });
+    }
+    
+    await mainClass.save();
+    res.json({ message: 'Documentation deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Internal server error', message: error.message });
   }
