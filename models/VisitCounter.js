@@ -13,7 +13,11 @@ const visitCounterSchema = new mongoose.Schema({
       date: { type: String, required: true }, // YYYY-MM-DD
       total: { type: Number, default: 0 }
     }
-  ]
+  ],
+    dashboardMonthlyTarget: {
+    type: Number,
+    default: 0,
+  },
 }, {
   timestamps: true
 });

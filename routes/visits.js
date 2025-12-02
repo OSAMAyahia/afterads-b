@@ -82,4 +82,82 @@ router.get('/counter', async (req, res) => {
   }
 });
 
+// PUT /api/visits/target - تعديل الهدف الشهري لمسار معين
+router.put('/target', async (req, res) => {
+  try {
+    const { dashboardMonthlyTarget } = req.body;
+
+    // ثابت دايمًا
+    const path = 'admin/analisis';
+
+    if (dashboardMonthlyTarget === undefined || typeof dashboardMonthlyTarget !== 'number') {
+      return res.status(400).json({
+        success: false,
+        message: 'dashboardMonthlyTarget يجب أن يكون رقم'
+      });
+    }
+
+    // هنستخدم upsert لإنشاء المستند لو مش موجود
+    const doc = await VisitCounter.findOneAndUpdate(
+      { path },
+      {
+        path,
+        dashboardMonthlyTarget,
+        // لو بتستخدم counts ضروري نسيبها زي ما هي لو موجودة
+      },
+      {
+        new: true,
+        upsert: true // 👈 هنا الإنشاء التلقائي لو مش موجود
+      }
+    );
+
+    return res.json({
+      success: true,
+      message: 'تم تحديث الهدف الشهري بنجاح (أو إنشاؤه إذا لم يكن موجودًا)',
+      data: {
+        path,
+        dashboardMonthlyTarget: doc.dashboardMonthlyTarget
+      }
+    });
+
+  } catch (error) {
+    console.error('Error updating dashboardMonthlyTarget:', error);
+    return res.status(500).json({ success: false, message: 'خطأ في الخادم' });
+  }
+});
+
+
+// GET /target - جلب الهدف الشهري لمسار admin/analisis
+router.get('/target', async (req, res) => {
+  try {
+    const path = 'admin/analisis';
+
+    const doc = await VisitCounter.findOne({ path });
+
+    if (!doc) {
+      // لو مفيش doc خالص → رجّع صفر
+      return res.json({
+        success: true,
+        data: {
+          path,
+          dashboardMonthlyTarget: 0
+        }
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        path: doc.path,
+        dashboardMonthlyTarget: doc.dashboardMonthlyTarget || 0
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching dashboardMonthlyTarget:', error);
+    return res.status(500).json({ success: false, message: 'خطأ في الخادم' });
+  }
+});
+
+
 export default router;
