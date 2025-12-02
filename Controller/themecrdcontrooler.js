@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// إعداد Multer
+// ✅ إعداد Multer لدعم رفع صور متعددة
 const storage = multer.diskStorage({
   destination: async (req, file, cb) => {
     const uploadPath = 'uploads/components';
@@ -26,7 +26,10 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { 
+    fileSize: 5 * 1024 * 1024, // 5MB لكل صورة
+    files: 13 // backgroundImage + 12 galleryImages
+  },
   fileFilter: (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif|webp/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
@@ -38,7 +41,10 @@ const upload = multer({
       cb(new Error('يُسمح فقط بالصور (jpeg, jpg, png, gif, webp)'));
     }
   }
-}).single('backgroundImage');
+}).fields([
+  { name: 'backgroundImage', maxCount: 1 },
+  { name: 'galleryImages', maxCount: 12 }
+]);
 
 // ✅ GET All Components
 export const getAllComponents = async (req, res) => {
@@ -101,154 +107,227 @@ export const getComponentById = async (req, res) => {
   }
 };
 
-// ✅ CREATE Component (يدعم JSON و form-data)
 export const createComponent = async (req, res) => {
-  upload(req, res, async (err) => {
-    if (err) {
-      return res.status(400).json({
+  try {
+    console.log('📦 Body:', req.body);
+    console.log('📁 Files:', req.files);
+
+    // ✅ معالجة features و galleryImages
+    let features = req.body.features || [];
+    let galleryImages = req.body.galleryImages || [];
+    
+    if (typeof features === 'string') {
+      try {
+        features = JSON.parse(features);
+      } catch (e) {
+        return res.status(400).json({
+          success: false,
+          message: 'صيغة features غير صحيحة'
+        });
+      }
+    }
+    
+    if (typeof galleryImages === 'string') {
+      try {
+        galleryImages = JSON.parse(galleryImages);
+      } catch (e) {
+        galleryImages = [];
+      }
+    }
+    
+    const requestedOrder = req.body.orderNumber;
+    let safeOrderNumber;
+    if (requestedOrder !== undefined && requestedOrder !== null) {
+      const exists = await Component.exists({ orderNumber: requestedOrder });
+      if (exists) {
+        const maxDoc = await Component.findOne().sort({ orderNumber: -1 }).select('orderNumber');
+        safeOrderNumber = ((maxDoc && maxDoc.orderNumber) ? maxDoc.orderNumber : 0) + 1;
+      } else {
+        safeOrderNumber = parseInt(requestedOrder);
+      }
+    } else {
+      const maxDoc = await Component.findOne().sort({ orderNumber: -1 }).select('orderNumber');
+      safeOrderNumber = ((maxDoc && maxDoc.orderNumber) ? maxDoc.orderNumber : 0) + 1;
+    }
+    if (!Number.isFinite(safeOrderNumber) || safeOrderNumber < 1) {
+      safeOrderNumber = 1;
+    }
+
+    const componentData = {
+      title: req.body.title,
+      description: req.body.description,
+      overlayText: req.body.overlayText || '',
+      orderNumber: safeOrderNumber,
+      features: features,
+      category: req.body.category || 'عنصر متقدم',
+      isActive: req.body.isActive !== 'false' && req.body.isActive !== false,
+      displayOrder: req.body.displayOrder || 0,
+      icon: req.body.icon || 'FaUser',
+      galleryImages: Array.isArray(galleryImages) ? galleryImages : []
+    };
+    
+    // ✅ إضافة الصورة الرئيسية
+    if (req.files?.backgroundImage?.[0]) {
+      componentData.backgroundImage = `/uploads/components/${req.files.backgroundImage[0].filename}`;
+    }
+    
+    // ✅ إضافة صور المعرض
+    if (req.files?.galleryImages?.length) {
+      const uploadedGallery = req.files.galleryImages.map(file => 
+        `/uploads/components/${file.filename}`
+      );
+      componentData.galleryImages = [...componentData.galleryImages, ...uploadedGallery];
+    }
+    
+    const component = await Component.create(componentData);
+    
+    res.status(201).json({
+      success: true,
+      message: 'تم إنشاء العنصر بنجاح',
+      data: component
+    });
+  } catch (error) {
+    console.error('❌ Error:', error);
+    
+    // ✅ حذف الصور في حالة الخطأ
+    if (req.files) {
+      const allFiles = [
+        ...(req.files.backgroundImage || []),
+        ...(req.files.galleryImages || [])
+      ];
+      for (const file of allFiles) {
+        await fs.unlink(file.path).catch(() => {});
+      }
+    }
+    
+    res.status(400).json({
+      success: false,
+      message: 'خطأ في إنشاء العنصر',
+      error: error.message
+    });
+  }
+};
+
+export const updateComponent = async (req, res) => {
+  try {
+    const component = await Component.findById(req.params.id);
+    
+    if (!component) {
+      if (req.files) {
+        const allFiles = [
+          ...(req.files.backgroundImage || []),
+          ...(req.files.galleryImages || [])
+        ];
+        for (const file of allFiles) {
+          await fs.unlink(file.path).catch(() => {});
+        }
+      }
+      return res.status(404).json({
         success: false,
-        message: err.message
+        message: 'العنصر غير موجود'
       });
     }
     
-    try {
-      // ✅ دعم كل من JSON و form-data
-      let features = req.body.features || [];
-      
+    const updateData = {
+      title: req.body.title || component.title,
+      description: req.body.description || component.description,
+      overlayText: req.body.overlayText !== undefined ? req.body.overlayText : component.overlayText,
+      orderNumber: req.body.orderNumber || component.orderNumber,
+      category: req.body.category || component.category,
+      displayOrder: req.body.displayOrder !== undefined ? req.body.displayOrder : component.displayOrder,
+      isActive: req.body.isActive !== undefined ? (req.body.isActive === 'true' || req.body.isActive === true) : component.isActive,
+      icon: req.body.icon || component.icon
+    };
+    
+    // ✅ معالجة features
+    if (req.body.features !== undefined) {
+      let features = req.body.features;
       if (typeof features === 'string') {
         try {
           features = JSON.parse(features);
         } catch (e) {
           return res.status(400).json({
             success: false,
-            message: 'صيغة features غير صحيحة. يجب أن تكون array'
+            message: 'صيغة features غير صحيحة'
           });
         }
       }
-      
-      const componentData = {
-        title: req.body.title,
-        description: req.body.description,
-        overlayText: req.body.overlayText,
-        orderNumber: req.body.orderNumber,
-        features: features,
-        category: req.body.category || 'عنصر متقدم',
-        isActive: req.body.isActive !== 'false' && req.body.isActive !== false,
-        displayOrder: req.body.displayOrder || 0,
-        icon: req.body.icon
-      };
-      
-      if (req.file) {
-        componentData.backgroundImage = `/uploads/components/${req.file.filename}`;
-      }
-      
-      const component = await Component.create(componentData);
-      
-      res.status(201).json({
-        success: true,
-        message: 'تم إنشاء العنصر بنجاح',
-        data: component
-      });
-    } catch (error) {
-      if (req.file) {
-        await fs.unlink(req.file.path).catch(() => {});
-      }
-      
-      res.status(400).json({
-        success: false,
-        message: 'خطأ في إنشاء العنصر',
-        error: error.message
-      });
+      updateData.features = features;
     }
-  });
-};
-
-// ✅ UPDATE Component (يدعم JSON و form-data)
-export const updateComponent = async (req, res) => {
-  upload(req, res, async (err) => {
-    if (err) {
+    
+    // ✅ معالجة galleryImages
+    let galleryImages = component.galleryImages || [];
+    
+    if (req.body.galleryImages !== undefined) {
+      let newGallery = req.body.galleryImages;
+      if (typeof newGallery === 'string') {
+        try {
+          newGallery = JSON.parse(newGallery);
+        } catch (e) {
+          newGallery = [];
+        }
+      }
+      galleryImages = Array.isArray(newGallery) ? newGallery : [];
+    }
+    
+    if (req.files?.galleryImages?.length) {
+      const uploadedGallery = req.files.galleryImages.map(file => 
+        `/uploads/components/${file.filename}`
+      );
+      galleryImages = [...galleryImages, ...uploadedGallery];
+    }
+    
+    if (galleryImages.length > 12) {
       return res.status(400).json({
         success: false,
-        message: err.message
+        message: 'لا يمكن إضافة أكثر من 12 صورة'
       });
     }
     
-    try {
-      const component = await Component.findById(req.params.id);
-      
-      if (!component) {
-        if (req.file) {
-          await fs.unlink(req.file.path).catch(() => {});
-        }
-        return res.status(404).json({
-          success: false,
-          message: 'العنصر غير موجود'
-        });
+    updateData.galleryImages = galleryImages;
+    
+    // ✅ تحديث الصورة الرئيسية
+    if (req.files?.backgroundImage?.[0]) {
+      if (component.backgroundImage) {
+        const oldImagePath = path.join(__dirname, '..', component.backgroundImage);
+        await fs.unlink(oldImagePath).catch(() => {});
       }
-      
-      const updateData = {
-        title: req.body.title || component.title,
-        description: req.body.description || component.description,
-        overlayText: req.body.overlayText !== undefined ? req.body.overlayText : component.overlayText,
-        orderNumber: req.body.orderNumber || component.orderNumber,
-        category: req.body.category || component.category,
-        displayOrder: req.body.displayOrder !== undefined ? req.body.displayOrder : component.displayOrder,
-        isActive: req.body.isActive !== undefined ? (req.body.isActive === 'true' || req.body.isActive === true) : component.isActive
-      };
-      
-      // ✅ دعم features من JSON و form-data
-      if (req.body.features !== undefined) {
-        let features = req.body.features;
-        if (typeof features === 'string') {
-          try {
-            features = JSON.parse(features);
-          } catch (e) {
-            if (req.file) {
-              await fs.unlink(req.file.path).catch(() => {});
-            }
-            return res.status(400).json({
-              success: false,
-              message: 'صيغة features غير صحيحة'
-            });
-          }
-        }
-        updateData.features = features;
-      }
-      
-      if (req.file) {
-        if (component.backgroundImage) {
-          const oldImagePath = path.join(__dirname, '..', component.backgroundImage);
-          await fs.unlink(oldImagePath).catch(() => {});
-        }
-        updateData.backgroundImage = `/uploads/components/${req.file.filename}`;
-      }
-      
-      const updatedComponent = await Component.findByIdAndUpdate(
-        req.params.id,
-        updateData,
-        { new: true, runValidators: true }
-      );
-      
-      res.status(200).json({
-        success: true,
-        message: 'تم تحديث العنصر بنجاح',
-        data: updatedComponent
-      });
-    } catch (error) {
-      if (req.file) {
-        await fs.unlink(req.file.path).catch(() => {});
-      }
-      
-      res.status(400).json({
-        success: false,
-        message: 'خطأ في تحديث العنصر',
-        error: error.message
-      });
+      updateData.backgroundImage = `/uploads/components/${req.files.backgroundImage[0].filename}`;
     }
-  });
+    
+    const updatedComponent = await Component.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true, runValidators: true }
+    );
+    
+    res.status(200).json({
+      success: true,
+      message: 'تم تحديث العنصر بنجاح',
+      data: updatedComponent
+    });
+  } catch (error) {
+    console.error('❌ Update Error:', error);
+    
+    if (req.files) {
+      const allFiles = [
+        ...(req.files.backgroundImage || []),
+        ...(req.files.galleryImages || [])
+      ];
+      for (const file of allFiles) {
+        await fs.unlink(file.path).catch(() => {});
+      }
+    }
+    
+    res.status(400).json({
+      success: false,
+      message: 'خطأ في تحديث العنصر',
+      error: error.message
+    });
+  }
 };
 
-// ✅ DELETE Component
+// ✅ DELETE Component (مع حذف كل الصور)
 export const deleteComponent = async (req, res) => {
   try {
     const component = await Component.findById(req.params.id);
@@ -260,9 +339,18 @@ export const deleteComponent = async (req, res) => {
       });
     }
     
+    // ✅ حذف الصورة الرئيسية
     if (component.backgroundImage) {
       const imagePath = path.join(__dirname, '..', component.backgroundImage);
       await fs.unlink(imagePath).catch(() => {});
+    }
+    
+    // ✅ حذف صور المعرض
+    if (component.galleryImages?.length) {
+      for (const imgUrl of component.galleryImages) {
+        const imgPath = path.join(__dirname, '..', imgUrl);
+        await fs.unlink(imgPath).catch(() => {});
+      }
     }
     
     await Component.findByIdAndDelete(req.params.id);
@@ -280,7 +368,7 @@ export const deleteComponent = async (req, res) => {
   }
 };
 
-// ✅ BULK DELETE
+// ✅ BULK DELETE (مع حذف كل الصور)
 export const bulkDeleteComponents = async (req, res) => {
   try {
     const { ids } = req.body;
@@ -294,10 +382,18 @@ export const bulkDeleteComponents = async (req, res) => {
     
     const components = await Component.find({ _id: { $in: ids } });
     
+    // ✅ حذف كل الصور (الرئيسية + المعرض)
     for (const component of components) {
       if (component.backgroundImage) {
         const imagePath = path.join(__dirname, '..', component.backgroundImage);
         await fs.unlink(imagePath).catch(() => {});
+      }
+      
+      if (component.galleryImages?.length) {
+        for (const imgUrl of component.galleryImages) {
+          const imgPath = path.join(__dirname, '..', imgUrl);
+          await fs.unlink(imgPath).catch(() => {});
+        }
       }
     }
     
@@ -316,7 +412,7 @@ export const bulkDeleteComponents = async (req, res) => {
   }
 };
 
-// ✅ UPDATE Order
+// ✅ UPDATE Display Order
 export const updateDisplayOrder = async (req, res) => {
   try {
     const { updates } = req.body;

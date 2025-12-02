@@ -416,8 +416,7 @@ app.delete('/api/categories/:id', async (req, res) => {
 app.get('/api/orders', async (req, res) => {
   try {
     const orders = await Order.find({
-      customerAddress: { $type: "string" } // فقط الطلبات الجديدة اللي العنوان فيها string
-    }).sort({ orderDate: -1 });
+     }).sort({ orderDate: -1 });
     res.json(orders);
   } catch (error) {
     console.error('Error in GET /api/orders:', error);

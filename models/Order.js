@@ -33,7 +33,7 @@ const orderSchema = new mongoose.Schema({
   customerPhone: { type: String, default: '' },
   
   // معلومات التوصيل التفصيلية (اختيارية)
-  customerAddress: { type: String, required: true },
+  customerAddress: { type: String },
   
   // تفاصيل الطلب
   items: [orderItemSchema],

@@ -20,6 +20,18 @@ const componentSchema = new mongoose.Schema({
     default: null
   },
   
+  // ✅ إضافة حقل الصور المتعددة
+  galleryImages: {
+    type: [String],
+    default: [],
+    validate: {
+      validator: function(arr) {
+        return arr.length <= 12; // حد أقصى 12 صورة
+      },
+      message: 'لا يمكن إضافة أكثر من 12 صورة في المعرض'
+    }
+  },
+  
   overlayText: {
     type: String,
     trim: true,
@@ -43,10 +55,12 @@ const componentSchema = new mongoose.Schema({
     default: 'عنصر متقدم',
     trim: true
   },
-    icon: {
+  
+  icon: {
     type: String,
     trim: true,
-   required: true
+    required: true,
+    default: 'FaUser'
   },
   
   isActive: {
@@ -74,9 +88,11 @@ const componentSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
+// Indexes للبحث السريع
 componentSchema.index({ displayOrder: 1, orderNumber: 1 });
 componentSchema.index({ isActive: 1, displayOrder: 1 });
 
+// Pre-save middleware
 componentSchema.pre('save', function(next) {
   this.updatedAt = Date.now();
   next();
