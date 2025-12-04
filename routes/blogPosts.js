@@ -2,46 +2,59 @@ import express from 'express';
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 import BlogPost from '../models/BlogPost.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// إعدادات Multer لرفع الصور
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dir = path.join(__dirname, '../public/images/');
-    cb(null, dir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'blog-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
+// إعدادات Multer لحفظ الصور في الذاكرة مؤقتًا
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
 
-const upload = multer({
-  storage,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB
-    files: 1
-  },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('فقط ملفات الصور مسموحة!'), false);
+const handleBase64Image = (req, res, next) => {
+  if (req.body.featuredImage && req.body.featuredImage.startsWith('data:image')) {
+    const base64Data = req.body.featuredImage;
+    const matches = base64Data.match(/^data:image\/([A-Za-z-+/]+);base64,(.+)$/);
+    if (matches) {
+      const imageBuffer = Buffer.from(matches[2], 'base64');
+      const extension = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+      const filename = `blog-${Date.now()}-${Math.round(Math.random() * 1E9)}.${extension}`;
+      const filePath = path.join(__dirname, '../public/images/', filename);
+
+      // التأكد من وجود المجلد
+      const dir = path.join(__dirname, '../public/images/');
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+
+      fs.writeFileSync(filePath, imageBuffer);
+
+      req.file = {
+        filename: filename,
+        path: filePath,
+        originalname: `featured.${extension}`,
+        mimetype: `image/${extension}`,
+        size: imageBuffer.length
+      };
     }
   }
-});
+  next();
+};
 
 const uploadImage = (req, res, next) => {
-  upload.single('featuredImage')(req, res, (err) => {
-    if (err) {
-      // Pass the error to the error handling middleware
-      return next(err);
-    }
+  if (!req.file) {
+    // محاولة رفع ملف من multipart إذا لم يتم التعامل مع Base64
+    upload.single('featuredImage')(req, res, (err) => {
+      if (err) {
+        return next(err);
+      }
+      next();
+    });
+  } else {
+    // إذا تم بالفعل تعيين req.file من Base64، نكمل التنفيذ
     next();
-  });
+  }
 };
 
 const router = express.Router();
@@ -174,7 +187,7 @@ router.post('/upload-image', uploadImage, async (req, res) => {
 });
 
 // Create new blog post
-router.post('/', uploadImage, async (req, res) => {
+router.post('/', handleBase64Image, uploadImage, async (req, res) => {
   try {
     const { 
       title, slug, excerpt, content, author, categories,
@@ -315,7 +328,7 @@ router.post('/', uploadImage, async (req, res) => {
 });
 
 // Update blog post
-router.put('/:_id', uploadImage, async (req, res) => {
+router.put('/:_id', handleBase64Image, uploadImage, async (req, res) => {
   try {
     const { _id } = req.params;
     const { 
@@ -462,7 +475,5 @@ router.delete('/:id', async (req, res) => {
     });
   }
 });
-
-
 
 export default router;
