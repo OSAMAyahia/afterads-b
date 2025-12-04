@@ -96,6 +96,7 @@ import visits from './routes/visits.js';
 import themeWorks from './routes/themeWorks.js';
 import documentationsRoutes from './routes/documentations.js';
 import announcement from './routes/announcementBar.js';
+import navigationVisibilityRoutes from './routes/navigationVisibility.js';
 
 
 import subcategoriesRoutes from './routes/subcategories.js';
@@ -2346,6 +2347,7 @@ app.use('/api/theme-card', themecard);
 app.use('/api/theme-works', themeWorks);
 app.use('/api/visits', visits); 
 app.use('/api/announcement-bar', announcement); 
+app.use('/api/navigation-visibility', navigationVisibilityRoutes);
 
 
 
