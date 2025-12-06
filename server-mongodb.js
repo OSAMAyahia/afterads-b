@@ -2064,7 +2064,7 @@ app.post('/api/checkout', async (req, res) => {
   try {
     const { items, customerInfo, paymentMethod, total, subtotal, couponDiscount, appliedCoupon, paymentId, paymentStatus, userId, isGuestOrder, applyLoyalty, loyaltyPointsToRedeem } = req.body;
     
-    console.log('💰 [Checkout] Creating order with data:', {
+    console.log('💰 [Checkout] Creating order with data (SERVER CONTROLLED):', {
       customerInfo,
       itemsCount: items.length,
       total,
@@ -2073,7 +2073,16 @@ app.post('/api/checkout', async (req, res) => {
       paymentMethod,
       paymentStatus,
       userId,
-      isGuestOrder: !!isGuestOrder
+      isGuestOrder: !!isGuestOrder,
+      applyLoyalty,
+      loyaltyPointsToRedeem,
+      loyaltyData: { 
+        applyLoyalty, 
+        loyaltyPointsToRedeem, 
+        typeofApplyLoyalty: typeof applyLoyalty,
+        typeofLoyaltyPointsToRedeem: typeof loyaltyPointsToRedeem,
+        serverControl: 'LOYALTY POINTS AUTO-APPLIED BY SERVER IF AVAILABLE'
+      }
     });
     
     // التحقق من صحة البيانات الأساسية
@@ -2118,7 +2127,7 @@ app.post('/api/checkout', async (req, res) => {
     // استخدام القيم المحسوبة من الفرونت إند أو حساب قيم احتياطية
     const orderSubtotal = subtotal || orderItems.reduce((sum, item) => sum + item.totalPrice, 0);
     const orderCouponDiscount = couponDiscount || 0;
-    let orderTotal = total || (orderSubtotal - orderCouponDiscount);
+let orderTotal = orderSubtotal - orderCouponDiscount; // ✅ احسب من subtotal مباشرة
 
     let customer = null;
     if (customerInfo && customerInfo.email) {
@@ -2135,12 +2144,39 @@ app.post('/api/checkout', async (req, res) => {
     const requestedFromBody = (typeof loyaltyPointsToRedeem === 'number' && loyaltyPointsToRedeem >= 0)
       ? loyaltyPointsToRedeem
       : (typeof req.body.loyaltyDiscount === 'number' ? req.body.loyaltyDiscount : undefined);
-    const applyFlag = (applyLoyalty === false) ? false : true;
+    
+    // Debug loyalty points logic - SERVER CONTROLLED
+    console.log('🔍 [Checkout] Loyalty points debug (SERVER CONTROLLED):', {
+      applyLoyalty: applyLoyalty,
+      loyaltyPointsToRedeem: loyaltyPointsToRedeem,
+      availablePoints: availablePoints,
+      requestedFromBody: requestedFromBody,
+      orderTotal: orderTotal,
+      customerExists: !!customer,
+      customerEmail: customer?.email
+    });
+    
+    // ✅ الخادم يتحكم تماماً في خصم نقاط الولاء
     let pointsToRedeem = 0;
-    if (applyFlag && availablePoints > 0) {
-      const requested = (requestedFromBody !== undefined) ? requestedFromBody : availablePoints;
-      pointsToRedeem = Math.min(requested, availablePoints, Math.max(orderTotal, 0));
+    if (availablePoints > 0 && orderTotal > 0) {
+      // استخدم النقاط المطلوبة أو كل النقاط المتاحة، أيهما أقل
+      const requested = (requestedFromBody !== undefined && requestedFromBody > 0) ? requestedFromBody : availablePoints;
+      pointsToRedeem = Math.min(requested, availablePoints, orderTotal);
       orderTotal = Math.max(orderTotal - pointsToRedeem, 0);
+      
+      console.log('✅ [Checkout] Loyalty points AUTO-APPLIED by server:', {
+        pointsToRedeem: pointsToRedeem,
+        newOrderTotal: orderTotal,
+        availablePoints: availablePoints,
+        requestedPoints: requested,
+        autoApplied: true
+      });
+    } else {
+      console.log('❌ [Checkout] Loyalty points NOT applied (server decision):', {
+        availablePoints: availablePoints,
+        orderTotal: orderTotal,
+        reason: availablePoints <= 0 ? 'no available points' : 'orderTotal <= 0'
+      });
     }
 
     // معلومات الكوبون

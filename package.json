@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@types/nodemailer": "^6.4.17",
+    "axios": "^1.13.2",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.2",
     "concurrently": "^9.1.2",
