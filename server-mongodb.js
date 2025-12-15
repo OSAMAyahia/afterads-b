@@ -174,7 +174,8 @@ const handleMulterError = (err, req, res, next) => {
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use('/images', express.static(path.join(__dirname, 'public/images')));
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+app.use('/images', express.static(path.join(process.cwd(), 'public/images')));
 app.use(handleMulterError);
 
 // Root health check
@@ -2409,7 +2410,7 @@ app.use((req, res, next) => {
 // ======================
 // ORIGINAL APIs (تم الاحتفاظ بها للتوافق مع الداش بورد)
 // ======================
-
+ 
 // Start server
 async function startServer() {
   await connectDB();

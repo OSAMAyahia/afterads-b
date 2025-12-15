@@ -17,7 +17,7 @@ const router = express.Router();
 // ✅ إعداد Multer هنا في الـ Routes
 const storage = multer.diskStorage({
   destination: async (req, file, cb) => {
-    const uploadPath = 'uploads/components';
+    const uploadPath = path.join(process.cwd(), 'uploads', 'components');
     try {
       await fs.mkdir(uploadPath, { recursive: true });
       cb(null, uploadPath);

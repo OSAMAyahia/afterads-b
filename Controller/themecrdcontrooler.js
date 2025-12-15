@@ -7,44 +7,44 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ✅ إعداد Multer لدعم رفع صور متعددة
-const storage = multer.diskStorage({
-  destination: async (req, file, cb) => {
-    const uploadPath = 'uploads/components';
-    try {
-      await fs.mkdir(uploadPath, { recursive: true });
-      cb(null, uploadPath);
-    } catch (error) {
-      cb(error);
-    }
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'component-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
+// ✅ إعداد Multer لدعم رفع صور متعددة - تم نقله إلى routes file
+// const storage = multer.diskStorage({
+//   destination: async (req, file, cb) => {
+//     const uploadPath = 'uploads/components';
+//     try {
+//       await fs.mkdir(uploadPath, { recursive: true });
+//       cb(null, uploadPath);
+//     } catch (error) {
+//       cb(error);
+//     }
+//   },
+//   filename: (req, file, cb) => {
+//     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+//     cb(null, 'component-' + uniqueSuffix + path.extname(file.originalname));
+//   }
+// });
 
-const upload = multer({
-  storage: storage,
-  limits: { 
-    fileSize: 5 * 1024 * 1024, // 5MB لكل صورة
-    files: 13 // backgroundImage + 12 galleryImages
-  },
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif|webp/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
+// const upload = multer({
+//   storage: storage,
+//   limits: { 
+//     fileSize: 5 * 1024 * 1024, // 5MB لكل صورة
+//     files: 13 // backgroundImage + 12 galleryImages
+//   },
+//   fileFilter: (req, file, cb) => {
+//     const allowedTypes = /jpeg|jpg|png|gif|webp/;
+//     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+//     const mimetype = allowedTypes.test(file.mimetype);
     
-    if (mimetype && extname) {
-      return cb(null, true);
-    } else {
-      cb(new Error('يُسمح فقط بالصور (jpeg, jpg, png, gif, webp)'));
-    }
-  }
-}).fields([
-  { name: 'backgroundImage', maxCount: 1 },
-  { name: 'galleryImages', maxCount: 12 }
-]);
+//     if (mimetype && extname) {
+//       return cb(null, true);
+//     } else {
+//       cb(new Error('يُسمح فقط بالصور (jpeg, jpg, png, gif, webp)'));
+//     }
+//   }
+// }).fields([
+//   { name: 'backgroundImage', maxCount: 1 },
+//   { name: 'galleryImages', maxCount: 12 }
+// ]);
 
 // ✅ GET All Components
 export const getAllComponents = async (req, res) => {
@@ -111,6 +111,8 @@ export const createComponent = async (req, res) => {
   try {
     console.log('📦 Body:', req.body);
     console.log('📁 Files:', req.files);
+    console.log('🔍 Background Image:', req.files?.backgroundImage?.[0]);
+    console.log('🖼️ Gallery Images:', req.files?.galleryImages);
 
     // ✅ معالجة features و galleryImages
     let features = req.body.features || [];
@@ -210,6 +212,10 @@ export const createComponent = async (req, res) => {
 
 export const updateComponent = async (req, res) => {
   try {
+    console.log('🔄 Update Component - Body:', req.body);
+    console.log('🔄 Update Component - Files:', req.files);
+    console.log('🔄 Update Component - Background Image:', req.files?.backgroundImage?.[0]);
+    
     const component = await Component.findById(req.params.id);
     
     if (!component) {
